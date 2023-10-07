@@ -13,6 +13,18 @@ const (
 	LvHP   = 3000
 )
 
+// Speed holds GCDs and Cast Times in ms
+type Speed struct {
+	AA_DOT_MOD float64
+	GCD1_5     int
+	GCD2       int
+	GCD2_5     int
+	GCD2_8     int
+	GCD3       int
+	GCD3_5     int
+	GCD4       int
+}
+
 type PlayerStats struct {
 	// Stats from Gear etc
 	weaponDamage    int
@@ -22,8 +34,7 @@ type PlayerStats struct {
 	determination   int
 	tenacity        int
 	piety           int
-	skillSpeed      int
-	spellSpeed      int
+	speed           int
 	vitality        int
 	// Calculated stats
 	AttackPowerMod     float64
@@ -34,6 +45,7 @@ type PlayerStats struct {
 	DeterminationMod   float64
 	TenacityMod        float64
 	TraitMod           float64 // Depends on class, defaulting to 1 (for now)
+	Speed              Speed
 }
 
 func NewPlayerStats(weaponDamage int, mainstat int, criticalHitRate int, directHitRate int, determination int, tenacity int, piety int, skillSpeed int, spellSpeed int, vitality int) *PlayerStats {
@@ -45,8 +57,7 @@ func NewPlayerStats(weaponDamage int, mainstat int, criticalHitRate int, directH
 		determination:   determination,
 		tenacity:        tenacity,
 		piety:           piety,
-		skillSpeed:      skillSpeed,
-		spellSpeed:      spellSpeed,
+		speed:           skillSpeed,
 		vitality:        vitality,
 		TraitMod:        1,
 	}
@@ -56,6 +67,7 @@ func NewPlayerStats(weaponDamage int, mainstat int, criticalHitRate int, directH
 	playerStats.calculateDeterminiation()
 	playerStats.calculateTenacity()
 	playerStats.calculateWeaponDamage()
+	playerStats.calculateSpeed()
 
 	return &playerStats
 }
@@ -86,4 +98,17 @@ func (ps *PlayerStats) calculateWeaponDamage() {
 	// Weapon damage is calculated as follows: f(WD) = ⌊ ( LevelModLv, MAIN · JobModJob, Attribute / 1000 ) + WD ⌋
 	// TODO: Implement JobMods, Currently assuming Warrior
 	ps.WeaponDamageMod = math.Floor((float64(LvMAIN)/105.0)/1000) + float64(ps.weaponDamage)
+}
+
+func (ps *PlayerStats) calculateSpeed() {
+	// AA and DOT Modifier is calculated as follows: f(SPD) = ( 1000 + ⌊ 130 × ( Speed - Level Lv, SUB )/ Level Lv, DIV ⌋ ) / 1000
+	ps.Speed.AA_DOT_MOD = (1000 + math.Floor(130*(float64(ps.speed)-float64(LvSUB))/float64(LvDIV))) / 1000.0
+	// GCD is calculated as follows: =(INT(GCD*(1000+CEILING(130*(400-Speed)/1900))/10000)/100)
+	ps.Speed.GCD1_5 = int(1500*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD2 = int(2000*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD2_5 = int(2500*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD2_8 = int(2800*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD3 = int(3000*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD3_5 = int(3500*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
+	ps.Speed.GCD4 = int(4000*(1000+math.Ceil(130*(400-float64(ps.speed))/1900))/10000) * 10
 }
