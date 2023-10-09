@@ -4,6 +4,7 @@ type AppliedBuff struct {
 	SourceID     int
 	AppliedUntil int64
 	Buff         Buff
+	Stacks       int
 }
 
 type ApplyType int
@@ -24,4 +25,5 @@ type Buff struct {
 	Duration  int64
 	ApplyType ApplyType
 	DamageMod float64
+	Stacks    int
 }

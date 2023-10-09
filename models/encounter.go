@@ -11,7 +11,7 @@ import (
 type Encounter struct {
 	id      int
 	Players []*Player
-	Enemies []*Enemy
+	Enemies []*Enemy `json:"-"`
 	// Arbitrary time value for how long the simulated encounter has been going (needed for GCDs, Cooldowns, etc.) in ms
 	encounterTime time.Duration
 	// Desired length of the encounter
@@ -19,9 +19,9 @@ type Encounter struct {
 	// How much time passes per tick
 	tickLength time.Duration
 	// How much DPS the encounter did
-	dps float64
+	DPS float64
 	// The encounters seed (to reproduce the same encounter)
-	seed int64
+	Seed int64
 }
 
 // NewEncounter creates a new encounter with the given amount of players and enemiess.
@@ -35,6 +35,7 @@ func NewEncounter(id int, numPlayer int, numEnemies int, length time.Duration, t
 			Name:  fmt.Sprintf("Player %d", i+1),
 			Stats: ps,
 			Job:   NewWarrior(),
+			Ping:  10,
 		}
 	}
 
@@ -52,25 +53,15 @@ func NewEncounter(id int, numPlayer int, numEnemies int, length time.Duration, t
 		encounterLength: length,
 		encounterTime:   0,
 		tickLength:      tickLength,
-		seed:            seed,
+		Seed:            seed,
 	}
-}
-
-// GetDPS returns the DPS of the encounter.
-func (e *Encounter) GetDPS() float64 {
-	return e.dps
-}
-
-// GetSeed returns the seed of the encounter.
-func (e *Encounter) GetSeed() int64 {
-	return e.seed
 }
 
 // Start starts the encounter loop.
 func (e *Encounter) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Set the seed
-	randGen := rand.New(rand.NewSource(e.seed))
+	randGen := rand.New(rand.NewSource(e.Seed))
 	for {
 		var wg sync.WaitGroup
 		wg.Add(len(e.Players))
@@ -89,10 +80,35 @@ func (e *Encounter) Start(wg *sync.WaitGroup) {
 			// Get how much damage the enemy took
 			damageTaken := e.Enemies[0].getDamageTaken()
 			// Calculate DPS
-			e.dps = float64(damageTaken) / (float64(e.encounterTime.Seconds()))
+			e.DPS = float64(damageTaken) / (float64(e.encounterTime.Seconds()))
+			// Round to 2 decimals
+			e.DPS = float64(int(e.DPS*100)) / 100
 			return
 		default:
 			// Continue
 		}
+	}
+}
+
+func (e *Encounter) CalculateCritDirectRate() {
+	for _, player := range e.Players {
+		player.CalculatedCritRate = player.Stats.CriticalHitPercent * 100
+		player.CalculatedDirectRate = player.Stats.DirectHitPercent * 100
+		player.ActualCritRate = 0
+		player.ActualDirectRate = 0
+		for _, log := range player.SkillLog {
+			if log.Crit {
+				player.ActualCritRate++
+			}
+			if log.Direct {
+				player.ActualDirectRate++
+			}
+		}
+		player.ActualCritRate /= float64(len(player.SkillLog))
+		player.ActualCritRate = float64(int(player.ActualCritRate*100)) / 100
+		player.ActualCritRate *= 100
+		player.ActualDirectRate /= float64(len(player.SkillLog))
+		player.ActualDirectRate = float64(int(player.ActualDirectRate*100)) / 100
+		player.ActualDirectRate *= 100
 	}
 }

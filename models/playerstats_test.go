@@ -142,3 +142,35 @@ func TestCalculateSpeed(t *testing.T) {
 		}
 	}
 }
+
+type DHtier struct {
+	dhAmount int
+	dhRate   float64
+}
+
+func SetupDHTiers() []DHtier {
+	dhts := []DHtier{
+		{400, 0.0},
+		{404, 0.001},
+		{407, 0.002},
+		{411, 0.003},
+		{414, 0.004},
+		{418, 0.005},
+		{421, 0.006},
+		{425, 0.007},
+		{815, 0.12},
+	}
+	return dhts
+}
+
+func TestCalculateDirectHit(t *testing.T) {
+	dhts := SetupDHTiers()
+
+	for _, dht := range dhts {
+		ps := NewPlayerStats(0, 0, 0, dht.dhAmount, 0, 0, 0, 0, 0, 0)
+
+		if ps.DirectHitPercent != dht.dhRate {
+			t.Errorf("Expected %f, got %f", dht.dhRate, ps.DirectHitPercent)
+		}
+	}
+}

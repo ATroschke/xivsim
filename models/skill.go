@@ -16,6 +16,7 @@ const (
 	GCD3
 	GCD3_5
 	GCD4
+	OGCD
 )
 
 type Skill struct {
@@ -24,8 +25,18 @@ type Skill struct {
 	Potency      int
 	ComboPotency int
 	GCD          GCD
+	BreaksCombo  bool
+	LockMS       int
+	CooldownMS   int
+	MaxCharges   int
 	AppliesBuffs []Buff
 	NextCombo    []*Skill
+	CustomLogic  func(player *Player, job Job) (bool, bool)
+}
+
+type Cooldown struct {
+	SkillID       int
+	CooldownUntil int64
 }
 
 func (s *Skill) Execute(player *Player, enemy *Enemy, encounterTime time.Duration, randGen *rand.Rand) {
@@ -47,10 +58,21 @@ func (s *Skill) Execute(player *Player, enemy *Enemy, encounterTime time.Duratio
 	case GCD4:
 		playerGCD = player.Stats.Speed.GCD4
 	}
-	player.CDUntil = encounterTime.Milliseconds() + int64(playerGCD)
+	// If the skill is an OGCD, don't apply the GCD
+	if s.GCD != OGCD {
+		player.CDUntil = encounterTime.Milliseconds() + int64(playerGCD)
+	}
+	// Apply custom logic (if the skill has any), this should also return if the skill should auto-crit or auto-direct
+	autocrit, autodirect := false, false
+	if s.CustomLogic != nil {
+		autocrit, autodirect = s.CustomLogic(player, player.Job)
+	}
 	// Apply damage if the skill has a potency
+	skillDamage := 0
+	crit := false
+	direct := false
 	if s.Potency > 0 {
-		enemy.takeDamage(player.calculateDamage(s.Potency, randGen))
+		skillDamage, crit, direct = enemy.takeDamage(player.calculateDamage(s.Potency, randGen, autocrit, autodirect))
 	}
 	// Apply buffs
 	for _, buff := range s.AppliesBuffs {
@@ -78,9 +100,20 @@ func (s *Skill) Execute(player *Player, enemy *Enemy, encounterTime time.Duratio
 				Buff:         buff,
 				SourceID:     player.ID,
 				AppliedUntil: encounterTime.Milliseconds() + buff.Duration,
+				Stacks:       buff.Stacks,
 			})
 		}
 	}
-	// Set the next combo
-	player.NextCombo = s.NextCombo
+	// Set the next combo (if the skill has one)
+	if s.NextCombo != nil {
+		player.NextCombo = s.NextCombo
+	} else {
+		// Remove the combo if the combo is finished
+		// HACK/TODO: Removes the Combo if the Skill Breaks Combo, but has no NextCombo. This is a hack to make the simulation work for now.
+		if s.BreaksCombo {
+			player.NextCombo = nil
+		}
+	}
+	// Log the skill
+	player.LogSkill(s, skillDamage, encounterTime, crit, direct)
 }

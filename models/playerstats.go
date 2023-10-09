@@ -1,6 +1,8 @@
 package models
 
-import "math"
+import (
+	"math"
+)
 
 // TODO: Implement all stats and formulas
 // https://www.akhmorning.com/allagan-studies/how-to-be-a-math-wizard/shadowbringers/functions/#lv-80-fap
@@ -64,6 +66,7 @@ func NewPlayerStats(weaponDamage int, mainstat int, criticalHitRate int, directH
 
 	playerStats.calculateAttackPower()
 	playerStats.calculateCriticalHit()
+	playerStats.calculateDirectHit()
 	playerStats.calculateDeterminiation()
 	playerStats.calculateTenacity()
 	playerStats.calculateWeaponDamage()
@@ -74,7 +77,10 @@ func NewPlayerStats(weaponDamage int, mainstat int, criticalHitRate int, directH
 
 func (ps *PlayerStats) calculateAttackPower() {
 	// f(ATK) depends on the player's class
-	ps.AttackPowerMod = math.Floor(165 * (float64(ps.mainstat) - float64(LvMAIN)) / float64(LvMAIN))
+	// TODO: Implement JobMods, Currently assuming Warrior
+	// Mdps = 195
+	// Mtank = 156
+	ps.AttackPowerMod = math.Floor(156 * (float64(ps.mainstat) - float64(LvMAIN)) / float64(LvMAIN))
 }
 
 func (ps *PlayerStats) calculateCriticalHit() {
@@ -82,6 +88,11 @@ func (ps *PlayerStats) calculateCriticalHit() {
 	ps.CriticalHitPercent = float64(200*(ps.criticalHitRate-LvSUB)/LvDIV+50) / 1000.0
 	// Critical Hit Strength is calculated as follows: f(CRIT) = 1400 + ⌊ 200 × ( CRIT - Level Lv, SUB)/ Level Lv, DIV ⌋
 	ps.CriticalHitMod = float64(1400+(200*(ps.criticalHitRate-LvSUB)/LvDIV)) / 1000.0
+}
+
+func (ps *PlayerStats) calculateDirectHit() {
+	// Direct Hit Rate is calculated as follows: p(DH) = ⌊ 550 × ( DH - Level Lv, SUB)/ Level Lv, DIV ⌋ / 10
+	ps.DirectHitPercent = float64(550*(ps.directHitRate-LvSUB)/LvDIV) / 1000.0
 }
 
 func (ps *PlayerStats) calculateDeterminiation() {
@@ -97,7 +108,7 @@ func (ps *PlayerStats) calculateTenacity() {
 func (ps *PlayerStats) calculateWeaponDamage() {
 	// Weapon damage is calculated as follows: f(WD) = ⌊ ( LevelModLv, MAIN · JobModJob, Attribute / 1000 ) + WD ⌋
 	// TODO: Implement JobMods, Currently assuming Warrior
-	ps.WeaponDamageMod = math.Floor((float64(LvMAIN)/105.0)/1000) + float64(ps.weaponDamage)
+	ps.WeaponDamageMod = math.Floor(((float64(LvMAIN) * 110.0) / 1000.0) + float64(ps.weaponDamage))
 }
 
 func (ps *PlayerStats) calculateSpeed() {
