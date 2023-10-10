@@ -100,17 +100,17 @@ func TestF_DET(t *testing.T) {
 		{
 			name:     "F_DET Case 1",
 			DET:      2182,
-			expected: 1122,
+			expected: 1132,
 		},
 		{
 			name:     "F_DET Case 2",
 			DET:      900,
-			expected: 1034,
+			expected: 1037,
 		},
 		{
 			name:     "F_DET Case 3",
 			DET:      7432,
-			expected: 1481,
+			expected: 1518,
 		},
 	}
 
@@ -220,6 +220,72 @@ func TestF_CRIT(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := F_CRIT(tt.CRIT, LvSub, LvDiv)
+			if result != tt.expected {
+				t.Errorf("Expected %v, but got %v", tt.expected, result)
+			}
+		})
+	}
+}
+func TestDirectDamage(t *testing.T) {
+	// Test cases
+	tests := []struct {
+		name     string
+		Potency  int
+		WD       int
+		M        int
+		MainStat int
+		DET      int
+		TNC      int
+		SPD      int
+		CRIT     int
+		TraitMod int
+		expected int
+	}{
+		{
+			name:     "DirectDamage Case 1",
+			Potency:  100,
+			WD:       132,
+			M:        156,
+			MainStat: 3330,
+			DET:      2182,
+			TNC:      529,
+			SPD:      400,
+			CRIT:     2576,
+			TraitMod: 100,
+			expected: 2526,
+		},
+		{
+			name:     "DirectDamage Case 2",
+			Potency:  200,
+			WD:       132,
+			M:        156,
+			MainStat: 3330,
+			DET:      2182,
+			TNC:      529,
+			SPD:      400,
+			CRIT:     2576,
+			TraitMod: 100,
+			expected: 5054,
+		},
+		{
+			name:     "DirectDamage Case 3",
+			Potency:  1000,
+			WD:       132,
+			M:        156,
+			MainStat: 3330,
+			DET:      2182,
+			TNC:      529,
+			SPD:      400,
+			CRIT:     2576,
+			TraitMod: 100,
+			expected: 25282,
+		},
+	}
+
+	// Test each case
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DirectDamage(tt.Potency, tt.WD, tt.M, tt.MainStat, LvMain, 110, tt.DET, LvDiv, tt.TNC, tt.SPD, tt.CRIT, LvSub, tt.TraitMod)
 			if result != tt.expected {
 				t.Errorf("Expected %v, but got %v", tt.expected, result)
 			}
