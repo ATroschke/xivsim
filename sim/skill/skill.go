@@ -1,6 +1,8 @@
 package skill
 
 import (
+	"fmt"
+
 	xivmath "github.com/ATroschke/xivsim/xiv-math"
 )
 
@@ -30,8 +32,8 @@ type Skill struct {
 	CooldownMS       int
 	MaxCharges       int
 	//AppliesBuffs     []Buff
-	NextCombo []*Skill
-	//CustomLogic      func(player *Player, job Job) (bool, bool)
+	NextCombo   []*Skill
+	CustomLogic func(v any)
 }
 
 func (s *Skill) CalculateDamage(
@@ -60,4 +62,5 @@ func (s *Skill) CalculateDamage(
 		400,
 		100,
 	)
+	fmt.Printf("%s: %d\n", s.Name, s.CalculatedDamage)
 }
