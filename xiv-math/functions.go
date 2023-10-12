@@ -42,3 +42,11 @@ func DirectDamage(Potency int, WD int, M int, MainStat int, LvMain int, JobMod i
 	D2 := math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(D1*F_TNC(TNC, LvMain, LvSub, LvDiv))/1000)*F_WD(WD, LvMain, JobMod))/100)*float64(TraitMod)) / 100)
 	return int(D2)
 }
+
+// Calculates the damage of an attack with the given Potency and Stats.
+// This will be used to pre-bake the damage of a skill for a player without Crit, Direct Hit and Buffs to speed up the calculation.
+func AutoAttack(Potency int, WD int, WDelay float64, M int, MainStat int, LvMain int, JobMod int, DET int, LvDiv int, TNC int, SPD int, CRIT int, LvSub int, TraitMod int) int {
+	D1 := math.Floor(math.Floor(math.Floor(float64(Potency)*F_AP(M, MainStat, LvMain)*F_DET(DET, LvMain, LvDiv))/100) / 1000)
+	D2 := math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(math.Floor(D1*F_TNC(TNC, LvMain, LvSub, LvDiv))/1000)*F_SPD(SPD, LvSub, LvDiv))/1000)*F_AUTO(LvMain, JobMod, WD, WDelay))/100)*float64(TraitMod)) / 100)
+	return int(D2)
+}

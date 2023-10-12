@@ -17,7 +17,8 @@ type Job interface {
 		tenacity int,
 	)
 	//AddBuff()
-	Tick(enemy *enemy.Enemy, encounterTime int64) int
+	Tick(enemy *enemy.Enemy, encounterTime int64) (int, int)
+	Report()
 }
 
 type DamageModifiers struct {

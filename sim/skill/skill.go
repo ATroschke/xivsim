@@ -1,8 +1,6 @@
 package skill
 
 import (
-	"fmt"
-
 	xivmath "github.com/ATroschke/xivsim/xiv-math"
 )
 
@@ -10,7 +8,8 @@ import (
 type GCD int
 
 const (
-	GCD1_5 = iota
+	AA = iota
+	GCD1_5
 	GCD2
 	GCD2_5
 	GCD2_8
@@ -29,11 +28,15 @@ type Skill struct {
 	GCD              GCD
 	BreaksCombo      bool
 	LockMS           int
-	CooldownMS       int
+	CooldownMS       int64
+	NextCharge       int64
 	MaxCharges       int
-	//AppliesBuffs     []Buff
-	NextCombo   []*Skill
-	CustomLogic func(v any)
+	Charges          int
+	NextCombo        []*Skill
+	CustomLogic      func(v any, time int64)
+	AutoCDH          bool
+	DamageDealt      int
+	Uses             int
 }
 
 func (s *Skill) CalculateDamage(
@@ -45,22 +48,41 @@ func (s *Skill) CalculateDamage(
 	skillSpeed int,
 	spellSpeed int,
 	tenacity int,
+	weaponDelay float64,
 ) {
-	// Calculate the base damage of the skill
-	s.CalculatedDamage = xivmath.DirectDamage(
-		s.Potency,
-		weaponDamage,
-		156,
-		mainStat,
-		390,
-		110,
-		determination,
-		1900,
-		tenacity,
-		skillSpeed,
-		criticalHit,
-		400,
-		100,
-	)
-	fmt.Printf("%s: %d\n", s.Name, s.CalculatedDamage)
+	if s.GCD != AA {
+		// Calculate the base damage of the skill
+		s.CalculatedDamage = xivmath.DirectDamage(
+			s.Potency,
+			weaponDamage,
+			156,
+			mainStat,
+			390,
+			110,
+			determination,
+			1900,
+			tenacity,
+			skillSpeed,
+			criticalHit,
+			400,
+			100,
+		)
+	} else {
+		s.CalculatedDamage = xivmath.AutoAttack(
+			s.Potency,
+			weaponDamage,
+			weaponDelay,
+			156,
+			mainStat,
+			390,
+			110,
+			determination,
+			1900,
+			tenacity,
+			skillSpeed,
+			criticalHit,
+			400,
+			100,
+		)
+	}
 }

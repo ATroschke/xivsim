@@ -9,6 +9,7 @@ import (
 // Speed holds GCDs and Cast Times in ms
 type Speed struct {
 	AA_DOT_MOD float64
+	AA         int
 	GCD1_5     int
 	GCD2       int
 	GCD2_5     int
@@ -19,9 +20,10 @@ type Speed struct {
 }
 
 // TODO: Do we need both SkillSpeed and SpellSpeed for casters? Does SkillSpeed scale Auto Attacks?
-func NewSpeed(speedAmount, LvSub, LvDiv int) *Speed {
+func NewSpeed(speedAmount, weapondelay, LvSub, LvDiv int) *Speed {
 	speed := Speed{}
 
+	speed.AA = weapondelay
 	speed.calculateSpeed(speedAmount, LvSub, LvDiv)
 
 	return &speed
@@ -42,6 +44,8 @@ func (s *Speed) calculateSpeed(speed, LvSub, LvDiv int) {
 
 func (s *Speed) GetGCD(gcd skill.GCD) int {
 	switch gcd {
+	case skill.AA:
+		return s.AA
 	case skill.GCD1_5:
 		return s.GCD1_5
 	case skill.GCD2:

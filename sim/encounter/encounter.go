@@ -87,7 +87,7 @@ func (e *Encounter) Run() {
 
 // Report prints a report of the Encounter.
 func (e *Encounter) Report() {
-	fmt.Printf("Encounter: %s\nStatus: %d\nSimulation Time: %dms\nIterations: %d\n\n", e.ID, e.Status, e.SimulationTime, len(e.Iterations))
+	fmt.Printf("Encounter: %s\nSimulation Time: %dms\nIterations: %d - Ping: %dms - Duration: %ds - Tick: %dms\n\n", e.ID, e.SimulationTime, len(e.Iterations), e.Ping, e.Duration, e.Tick)
 	TotalDamage := 0
 	LowestDamage := 0
 	HighestDamage := 0
@@ -128,6 +128,8 @@ func (e *Encounter) Report() {
 					if playerDamage[k].HighestDamage < e.Iterations[i].Players[j].DamageDealt {
 						playerDamage[k].HighestDamage = e.Iterations[i].Players[j].DamageDealt
 					}
+					// Print Statistics for AAs and Skills
+					// e.Iterations[i].Players[j].Job.Report()
 				}
 			}
 		}
@@ -138,9 +140,8 @@ func (e *Encounter) Report() {
 	}
 	fmt.Printf("Total Damage (All Encounters): %d\nAverage Damage: %d (%d DPS)\nLowest Damage: %d (%d DPS)\nHighest Damage: %d (%d DPS)\n\n",
 		TotalDamage, AverageDamage, AverageDPS, LowestDamage, LowestDPS, HighestDamage, HighestDPS)
-	// Print the Damage and DPS per Player
 	for i := 0; i < len(playerDamage); i++ {
-		fmt.Printf("Player: %s\nAverage Damage: %d (%d DPS)\nLowest Damage: %d (%d DPS)\nHighest Damage: %d (%d DPS)\n\n",
+		fmt.Printf("Player: %s - Average Damage: %d (%d DPS) - Lowest Damage: %d (%d DPS) - Highest Damage: %d (%d DPS)\n",
 			playerDamage[i].Player.Name, playerDamage[i].AverageDamage, playerDamage[i].AverageDamage/e.Duration,
 			playerDamage[i].LowestDamage, playerDamage[i].LowestDamage/e.Duration,
 			playerDamage[i].HighestDamage, playerDamage[i].HighestDamage/e.Duration)
