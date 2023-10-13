@@ -20,23 +20,24 @@ const (
 )
 
 type Skill struct {
-	Name             string
-	ID               int
-	Potency          int
-	ComboPotency     int
-	CalculatedDamage int
-	GCD              GCD
-	BreaksCombo      bool
-	LockMS           int
-	CooldownMS       int64
-	NextCharge       int64
-	MaxCharges       int
-	Charges          int
-	NextCombo        []*Skill
-	CustomLogic      func(v any, time int64)
-	AutoCDH          bool
-	DamageDealt      int
-	Uses             int
+	Name                    string
+	ID                      int
+	Potency                 int
+	ComboPotency            int
+	CalculatedDamage        int
+	CalculatedAutoCDHDamage int
+	GCD                     GCD
+	BreaksCombo             bool
+	LockMS                  int
+	CooldownMS              int64
+	NextCharge              int64
+	MaxCharges              int
+	Charges                 int
+	NextCombo               []*Skill
+	CustomLogic             func(job any, time int64)
+	AutoCDH                 bool
+	DamageDealt             int
+	Uses                    int
 }
 
 func (s *Skill) CalculateDamage(
@@ -64,6 +65,22 @@ func (s *Skill) CalculateDamage(
 			tenacity,
 			skillSpeed,
 			criticalHit,
+			400,
+			100,
+		)
+		s.CalculatedAutoCDHDamage = xivmath.DirectDamageAutoCDH(
+			s.Potency,
+			weaponDamage,
+			156,
+			mainStat,
+			390,
+			110,
+			determination,
+			1900,
+			tenacity,
+			skillSpeed,
+			criticalHit,
+			directHit,
 			400,
 			100,
 		)

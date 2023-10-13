@@ -1,26 +1,15 @@
 package job
 
 import (
-	"fmt"
-	"math/rand"
-	"reflect"
-
 	"github.com/ATroschke/xivsim/sim/buff"
-	"github.com/ATroschke/xivsim/sim/enemy"
 	"github.com/ATroschke/xivsim/sim/skill"
 )
 
 // Warrior implements Job
 type Warrior struct {
-	GCDUntil           int64
-	AnimationLockUntil int64
-	AutoAttack         skill.Skill
-	Skills             WarriorSkills
-	Speed              *Speed
-	DamageModifiers    DamageModifiers
-	NextCombo          []*skill.Skill
-	Buffs              WarriorBuffs
-	BeastGauge         int
+	Skills     WarriorSkills
+	Buffs      WarriorBuffs
+	BeastGauge int
 }
 
 // WarriorSkills contains Warrior specific skills
@@ -50,8 +39,6 @@ type WarriorBuffs struct {
 
 func NewWarrior(speed *Speed) *Warrior {
 	return &Warrior{
-		AutoAttack: AutoAttack,
-		Speed:      speed,
 		Skills: WarriorSkills{
 			HeavySwing:   HeavySwing,
 			Maim:         Maim,
@@ -74,229 +61,69 @@ func NewWarrior(speed *Speed) *Warrior {
 	}
 }
 
-func CopyWarrior(w *Warrior) *Warrior {
-	warrior := &Warrior{
-		AutoAttack:         w.AutoAttack,
-		Speed:              w.Speed,
-		Skills:             w.Skills,
-		Buffs:              w.Buffs,
-		DamageModifiers:    w.DamageModifiers,
-		GCDUntil:           0,
-		AnimationLockUntil: 0,
-	}
-	return warrior
-}
-
-func (w *Warrior) Report() {
-	var report string
-	// Report total AA Damage, Average AA Damage, AA Uses
-	report += "Auto Attack: "
-	report += fmt.Sprintf("Total Damage: %d - ", w.AutoAttack.DamageDealt)
-	report += fmt.Sprintf("Average Damage: %d - ", w.AutoAttack.DamageDealt/w.AutoAttack.Uses)
-	report += fmt.Sprintf("Uses: %d\n", w.AutoAttack.Uses)
-	// Report total Skill Damage, Average Skill Damage, Skill Uses
-	report += "\nSkills:\n"
-	t := reflect.TypeOf(w.Skills)
-	for i := 0; i < t.NumField(); i++ {
-		skill := reflect.ValueOf(&w.Skills).Elem().Field(i).Addr().Interface().(*skill.Skill)
-		report += fmt.Sprintf("%s: - ", skill.Name)
-		report += fmt.Sprintf("Total Damage: %d - ", skill.DamageDealt)
-		report += fmt.Sprintf("Average Damage: %d - ", skill.DamageDealt/skill.Uses)
-		report += fmt.Sprintf("Uses: %d\n", skill.Uses)
-	}
-	fmt.Print(report)
-}
-
-// CalculateSkills calculates the base damage of all skills (without crit, direct hit, buffs, etc.)
-func (w *Warrior) CalculateSkills(
-	weaponDamage int,
-	mainStat int,
-	criticalHit int,
-	directHit int,
-	determination int,
-	skillSpeed int,
-	spellSpeed int,
-	tenacity int,
-) {
-	// Calculate variable damage modifiers
-	w.DamageModifiers = CalculateDamageModifiers(criticalHit, directHit, 400, 1900)
-	weaponDelay := float64(w.Speed.AA) / 1000
-	// TODO: Pass down all needed values from the Players stats
-	t := reflect.TypeOf(w.Skills)
-	for i := 0; i < t.NumField(); i++ {
-		skill := reflect.ValueOf(&w.Skills).Elem().Field(i).Addr().Interface().(*skill.Skill)
-		skill.CalculateDamage(
-			weaponDamage,
-			mainStat,
-			criticalHit,
-			directHit,
-			determination,
-			skillSpeed,
-			spellSpeed,
-			tenacity,
-			weaponDelay,
-		)
-	}
-	w.AutoAttack.CalculateDamage(
-		weaponDamage,
-		mainStat,
-		criticalHit,
-		directHit,
-		determination,
-		skillSpeed,
-		spellSpeed,
-		tenacity,
-		weaponDelay,
-	)
-}
-
-func (w *Warrior) Update(encounterTime int64) {
-	// Check if any buffs need to be removed
-	bt := reflect.TypeOf(w.Buffs)
-	for i := 0; i < bt.NumField(); i++ {
-		buff := reflect.ValueOf(&w.Buffs).Elem().Field(i).Addr().Interface().(*buff.Buff)
-		if buff.AppliedUntil <= encounterTime {
-			buff.AppliedUntil = 0
-		}
-	}
-	// Check if any skills need to be recharged
-	st := reflect.TypeOf(w.Skills)
-	for i := 0; i < st.NumField(); i++ {
-		skill := reflect.ValueOf(&w.Skills).Elem().Field(i).Addr().Interface().(*skill.Skill)
-		if skill.NextCharge > 0 {
-			if skill.NextCharge <= encounterTime {
-				skill.Charges++
-				if skill.Charges >= skill.MaxCharges {
-					skill.NextCharge = 0
-				} else {
-					skill.NextCharge += skill.CooldownMS
-				}
-			}
-		}
+func CopyWarrior(j *Job) *Warrior {
+	w := j.JobImpl.(*Warrior)
+	return &Warrior{
+		Skills: WarriorSkills{
+			HeavySwing:   w.Skills.HeavySwing,
+			Maim:         w.Skills.Maim,
+			StormsEye:    w.Skills.StormsEye,
+			StormsPath:   w.Skills.StormsPath,
+			FellCleave:   w.Skills.FellCleave,
+			Upheaval:     w.Skills.Upheaval,
+			Onslaught:    w.Skills.Onslaught,
+			Infuriate:    w.Skills.Infuriate,
+			InnerChaos:   w.Skills.InnerChaos,
+			InnerRelease: w.Skills.InnerRelease,
+			PrimalRend:   w.Skills.PrimalRend,
+		},
+		Buffs: WarriorBuffs{
+			SurgingTempest:  w.Buffs.SurgingTempest,
+			NascentChaos:    w.Buffs.NascentChaos,
+			InnerRelease:    w.Buffs.InnerRelease,
+			PrimalRendReady: w.Buffs.PrimalRendReady,
+		},
 	}
 }
 
-func (w *Warrior) IncreaseBeastGauge(amount int) {
-	w.BeastGauge += amount
-	if w.BeastGauge > 100 {
-		w.BeastGauge = 100
+func (w *Warrior) GetSkills() []*skill.Skill {
+	return []*skill.Skill{
+		&w.Skills.HeavySwing,
+		&w.Skills.Maim,
+		&w.Skills.StormsEye,
+		&w.Skills.StormsPath,
+		&w.Skills.FellCleave,
+		&w.Skills.Upheaval,
+		&w.Skills.Onslaught,
+		&w.Skills.Infuriate,
+		&w.Skills.InnerChaos,
+		&w.Skills.InnerRelease,
+		&w.Skills.PrimalRend,
 	}
 }
 
-func (w *Warrior) DecreaseBeastGauge(amount int) {
-	w.BeastGauge -= amount
-	if w.BeastGauge < 0 {
-		w.BeastGauge = 0
+func (w *Warrior) GetBuffs() []*buff.Buff {
+	return []*buff.Buff{
+		&w.Buffs.SurgingTempest,
+		&w.Buffs.NascentChaos,
+		&w.Buffs.InnerRelease,
+		&w.Buffs.PrimalRendReady,
 	}
 }
 
-// TODO: Tick is called every time the encounter time is increased
-func (w *Warrior) Tick(enemy *enemy.Enemy, encounterTime int64) (int, int) {
-	// Update the Warrior
-	w.Update(encounterTime)
-	// Auto Attack
-	aa := 0
-	s := 0
-	if w.AutoAttack.NextCharge <= encounterTime || w.AutoAttack.NextCharge == 0 {
-		aa = w.UseSkill(enemy, &w.AutoAttack, encounterTime)
-	}
-	// Select the next skill
-	nextSkill := w.SelectNextSkill(encounterTime)
-	if nextSkill != nil {
-		// Use the skill
-		s = w.UseSkill(enemy, nextSkill, encounterTime)
-	}
-	return aa, s
-}
-
-func (w *Warrior) UseSkill(target *enemy.Enemy, usedSkill *skill.Skill, encounterTime int64) int {
-	usedSkill.Uses += 1
-	// We always need to set the AnimationLockUntil
-	if usedSkill.LockMS != 0 {
-		w.AnimationLockUntil = encounterTime + int64(usedSkill.LockMS)
-	}
-	// If the skill is a GCD, set the GCDUntil
-	if usedSkill.GCD != skill.OGCD && usedSkill.GCD != skill.AA {
-		w.GCDUntil = encounterTime + int64(w.Speed.GetGCD(usedSkill.GCD))
-	}
-	// If the Skill is an AA, set its NextCharge
-	if usedSkill.GCD == skill.AA {
-		usedSkill.NextCharge = encounterTime + int64(w.Speed.AA)
-	}
-
-	// If the skill has charges, decrease the charges
-	if usedSkill.MaxCharges > 0 {
-		usedSkill.Charges--
-		// If the Skill now has less than MaxCharges left, and NextCharge is 0, set NextCharge
-		if usedSkill.Charges < usedSkill.MaxCharges && usedSkill.NextCharge == 0 {
-			usedSkill.NextCharge = encounterTime + usedSkill.CooldownMS
-		}
-	}
-
-	// If the skill breaks the combo, reset the NextCombo
-	if usedSkill.BreaksCombo {
-		w.NextCombo = nil
-	}
-
-	// If the skill has a combo, set the NextCombo
-	if usedSkill.NextCombo != nil {
-		w.NextCombo = usedSkill.NextCombo
-	}
-
-	// Roll for Damage Range (0.95-1.05)
-	randDamage := rand.Float64()*0.1 + 0.95
-	// Roll for Crit and Direct Hit, if the skill is not AutoCDH
-	autoCDH := usedSkill.AutoCDH
-	var isCrit, isDirect bool
-	// Special case for Fell Cleave, since it is AutoCDH if Inner Release is active
-	if usedSkill.ID == FellClave.ID && w.Buffs.InnerRelease.Stacks > 0 {
-		autoCDH = true
-	} else if !autoCDH {
-		randCrit := rand.Float64()
-		randDirect := rand.Float64()
-		// Check if the skill is a crit
-		isCrit = randCrit <= w.DamageModifiers.CritRate
-		// Check if the skill is a direct hit
-		isDirect = randDirect <= w.DamageModifiers.DirectRate
-	}
-	// Calculate the damage modifiers
-	damageModifiers := randDamage
-	if isCrit || autoCDH {
-		damageModifiers *= w.DamageModifiers.CritDamage
-	}
-	if isDirect || autoCDH {
-		damageModifiers *= 1.25
-	}
-	// Apply Surgin Tempest damage modifier if the buff is active
-	if w.Buffs.SurgingTempest.AppliedUntil > encounterTime {
-		damageModifiers *= w.Buffs.SurgingTempest.DamageMod
-	}
-	// Calculate the damage
-	rolledDamage := float64(usedSkill.CalculatedDamage) * damageModifiers
-	damage := target.TakeDamage(int(rolledDamage))
-	usedSkill.DamageDealt += damage
-
-	// Apply custom logic if the skill has any
-	if usedSkill.CustomLogic != nil {
-		usedSkill.CustomLogic(w, encounterTime)
-	}
-
-	return damage
-}
-
-func (w *Warrior) SelectNextSkill(encounterTime int64) *skill.Skill {
+func (w *Warrior) NextSkill(job *Job, encounterTime int64) *skill.Skill {
 	// Check if the player is animation locked
-	if encounterTime < w.AnimationLockUntil {
+	if encounterTime < job.AnimationLockUntil {
 		// The player is animation locked, so we can't use any skill
 		return nil
 	}
 	// Check if the GCD is ready
-	if encounterTime >= w.GCDUntil {
+	if encounterTime >= job.GCDUntil {
 		// GCD is ready, so we need to select a GCD
-		return w.SelectNextGCD(encounterTime)
+		return w.SelectNextGCD(job, encounterTime)
 	}
 	// Check if the default animation lock (700ms) would cut into the GCD
-	if encounterTime+700 >= w.GCDUntil {
+	if encounterTime+700 >= job.GCDUntil {
 		// The default animation lock would cut into the GCD, so we can't use any skill
 		return nil
 	}
@@ -304,7 +131,7 @@ func (w *Warrior) SelectNextSkill(encounterTime int64) *skill.Skill {
 	return w.SelectNextOGCD(encounterTime)
 }
 
-func (w *Warrior) SelectNextGCD(encounterTime int64) *skill.Skill {
+func (w *Warrior) SelectNextGCD(job *Job, encounterTime int64) *skill.Skill {
 	// TODO: Check if we are in a group, and if so, check if we need to use/hold
 	if w.Buffs.NascentChaos.AppliedUntil-encounterTime > 7000 && w.Buffs.SurgingTempest.AppliedUntil-encounterTime > 7000 {
 		return &w.Skills.InnerChaos
@@ -319,15 +146,15 @@ func (w *Warrior) SelectNextGCD(encounterTime int64) *skill.Skill {
 		return &w.Skills.FellCleave
 	}
 	// Check if the player is in a combo
-	if w.NextCombo != nil {
+	if job.NextCombo != nil {
 		// The player is in a combo, so we need to select the next skill in the combo
-		if w.NextCombo[0].Name == StormsEye.Name || w.NextCombo[0].Name == StormsPath.Name {
+		if job.NextCombo[0].Name == StormsEye.Name || job.NextCombo[0].Name == StormsPath.Name {
 			if w.Buffs.SurgingTempest.AppliedUntil-encounterTime > 7000 {
 				return &w.Skills.StormsPath
 			}
 			return &w.Skills.StormsEye
 		}
-		if w.NextCombo[0].Name == Maim.Name {
+		if job.NextCombo[0].Name == Maim.Name {
 			return &w.Skills.Maim
 		}
 	}
@@ -353,19 +180,39 @@ func (w *Warrior) SelectNextOGCD(encounterTime int64) *skill.Skill {
 	return nil
 }
 
+func (w *Warrior) ValidateAutoCDH(s *skill.Skill) bool {
+	if s.AutoCDH {
+		return true
+	}
+	if s.Name == w.Skills.FellCleave.Name && w.Buffs.InnerRelease.Stacks > 0 {
+		return true
+	}
+	return false
+}
+
+func (w *Warrior) GetBuffModifiers(encounterTime int64) float64 {
+	if w.Buffs.SurgingTempest.AppliedUntil > encounterTime {
+		return w.Buffs.SurgingTempest.DamageMod
+	}
+	return 1
+}
+
+func (w *Warrior) IncreaseBeastGauge(amount int) {
+	w.BeastGauge += amount
+	if w.BeastGauge > 100 {
+		w.BeastGauge = 100
+	}
+}
+
+func (w *Warrior) DecreaseBeastGauge(amount int) {
+	w.BeastGauge -= amount
+	if w.BeastGauge < 0 {
+		w.BeastGauge = 0
+	}
+}
+
 // Warrior Skills
 var (
-	// Auto Attack
-	AutoAttack = skill.Skill{
-		Name:        "Attack",
-		ID:          1,
-		Potency:     90,
-		GCD:         skill.AA,
-		Charges:     1,
-		MaxCharges:  1,
-		BreaksCombo: false,
-		LockMS:      0,
-	}
 	// GCDs
 	HeavySwing = skill.Skill{
 		Name:        "Heavy Swing",
@@ -384,9 +231,9 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   []*skill.Skill{&StormsEye},
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 10
 			w.IncreaseBeastGauge(10)
 		},
@@ -399,9 +246,9 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   nil,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 10
 			w.IncreaseBeastGauge(10)
 			// Apply the Surging Tempest buff
@@ -416,9 +263,9 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   nil,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 20
 			w.IncreaseBeastGauge(20)
 		},
@@ -433,7 +280,7 @@ var (
 		NextCombo:   nil,
 		CustomLogic: func(v any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := v.(*Job).JobImpl.(*Warrior)
 			if w.Buffs.InnerRelease.Stacks > 0 {
 				w.Buffs.InnerRelease.Stacks--
 			} else {
@@ -454,7 +301,7 @@ var (
 		AutoCDH:     true,
 		CustomLogic: func(v any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := v.(*Job).JobImpl.(*Warrior)
 			// Remove the Nascent Chaos buff
 			w.Buffs.NascentChaos.AppliedUntil = 0
 			// Decrease the Beast Gauge by 50
@@ -473,7 +320,7 @@ var (
 		AutoCDH:     true,
 		CustomLogic: func(v any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := v.(*Job).JobImpl.(*Warrior)
 			// Remove the Primal Rend Ready buff
 			w.Buffs.PrimalRendReady.Stacks--
 		},
@@ -513,7 +360,7 @@ var (
 		Charges:     2,
 		CustomLogic: func(v any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := v.(*Job).JobImpl.(*Warrior)
 			// Apply the Nascent Chaos buff
 			w.Buffs.NascentChaos.AppliedUntil = time + w.Buffs.NascentChaos.DurationMS
 			// Increase the Beast Gauge by 50
@@ -532,7 +379,7 @@ var (
 		Charges:     1,
 		CustomLogic: func(v any, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Warrior)
+			w := v.(*Job).JobImpl.(*Warrior)
 			// Apply the Inner Release buff
 			w.Buffs.InnerRelease.Stacks = w.Buffs.InnerRelease.MaxStacks
 			// Apply the Primal Rend Ready buff

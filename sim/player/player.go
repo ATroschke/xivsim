@@ -48,8 +48,7 @@ func NewPlayer(name string, level int, playerJob string, weapondamage int, weapo
 	// TODO: Get LvSub and LvDiv from a table, based on the Level of the Player
 	player.Speed = job.NewSpeed(player.Stats.SkillSpeed, weapondelay, 400, 1900)
 
-	// TODO: Create the player's Job based on the given Job String
-	player.Job = job.NewWarrior(player.Speed)
+	player.Job = *job.NewJob(playerJob, player.Speed)
 
 	player.Job.CalculateSkills(
 		player.Stats.WeaponDamage,
@@ -69,13 +68,14 @@ func NewPlayer(name string, level int, playerJob string, weapondamage int, weapo
 // We don't want to modify the original player (since we may run multiple simulations at once)
 // as this would cause issues with Resources and Buffs. We also don't want to calculate all the static values again.
 func CopyPlayer(player *Player) *Player {
+	job := player.Job.CopyJob()
 	p := &Player{
 		Name:  player.Name,
 		Level: player.Level,
 		Stats: player.Stats,
 		Speed: player.Speed,
 		// We need to create a new instance of the Job, since otherwise instances would share a GCD and Animation Lock, and resources etc.
-		Job: job.CopyWarrior(player.Job.(*job.Warrior)),
+		Job: *job,
 	}
 	return p
 }

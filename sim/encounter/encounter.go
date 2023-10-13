@@ -7,6 +7,7 @@ import (
 
 	"github.com/ATroschke/xivsim/sim/enemy"
 	"github.com/ATroschke/xivsim/sim/player"
+	"github.com/ATroschke/xivsim/sim/skill"
 )
 
 // Encounter is a struct that contains all the information about an encounter and
@@ -29,6 +30,12 @@ type Encounter struct {
 	Tick           int              // Simulated Tick in Milliseconds (How often the Simulation is updated)
 	Status         int              // Status of the Encounter
 	SimulationTime int              // Time the Simulation took in Milliseconds
+	Downtime       []Downtime       // Downtime of the Encounter
+}
+
+type Downtime struct {
+	Start int
+	End   int
 }
 
 type Iteration struct {
@@ -38,17 +45,26 @@ type Iteration struct {
 	Enemy            *enemy.Enemy
 	Players          []*player.Player
 	TotalDamage      int // Total Damage taken by the Enemies, used to sort the Iterations
+	Downtime         []Downtime
 }
 
 type PlayerDamage struct {
 	Player        *player.Player
 	AverageDamage int
-	LowestDamage  int
-	HighestDamage int
+	LowestDamage  *FightResult
+	HighestDamage *FightResult
+}
+
+type FightResult struct {
+	Player   *player.Player
+	Damage   int
+	CritRate float64
+	DHitRate float64
+	CDHRate  float64
 }
 
 // NewEncounter creates a new Encounter with the given ID, Base Enemies and Base Players.
-func NewEncounter(id string, basePlayers []*player.Player, duration int, ping int, tick int, iterations int) *Encounter {
+func NewEncounter(id string, basePlayers []*player.Player, duration int, ping int, tick int, iterations int, downtimes *[]Downtime) *Encounter {
 	return &Encounter{
 		ID:           id,
 		BasePlayers:  basePlayers,
@@ -58,6 +74,7 @@ func NewEncounter(id string, basePlayers []*player.Player, duration int, ping in
 		Ping:         ping,
 		Tick:         tick,
 		Status:       STATUS_NOT_STARTED,
+		Downtime:     *downtimes,
 	}
 }
 
@@ -68,7 +85,7 @@ func (e *Encounter) Run() {
 	// Create all the Iterations
 	for i := 0; i < e.NrIterations; i++ {
 		// Create a new Iteration
-		e.Iterations[i] = NewIteration(int64(i), e.Duration, &e.BasePlayers)
+		e.Iterations[i] = NewIteration(int64(i), e.Duration, &e.BasePlayers, &e.Downtime)
 	}
 	// Create a waitgroup for the Iterations
 	var wg sync.WaitGroup
@@ -112,8 +129,6 @@ func (e *Encounter) Report() {
 		playerDamage = append(playerDamage, PlayerDamage{
 			Player:        e.BasePlayers[i],
 			AverageDamage: 0,
-			LowestDamage:  0,
-			HighestDamage: 0,
 		})
 	}
 	// Add the Damage of each Player to the PlayerDamage slice
@@ -122,14 +137,18 @@ func (e *Encounter) Report() {
 			for k := 0; k < len(playerDamage); k++ {
 				if playerDamage[k].Player.Name == e.Iterations[i].Players[j].Name {
 					playerDamage[k].AverageDamage += e.Iterations[i].Players[j].DamageDealt
-					if playerDamage[k].LowestDamage > e.Iterations[i].Players[j].DamageDealt || playerDamage[k].LowestDamage == 0 {
-						playerDamage[k].LowestDamage = e.Iterations[i].Players[j].DamageDealt
+					if playerDamage[k].LowestDamage == nil || playerDamage[k].LowestDamage.Damage > e.Iterations[i].Players[j].DamageDealt {
+						playerDamage[k].LowestDamage = &FightResult{
+							Damage: e.Iterations[i].Players[j].DamageDealt,
+							Player: e.Iterations[i].Players[j],
+						}
 					}
-					if playerDamage[k].HighestDamage < e.Iterations[i].Players[j].DamageDealt {
-						playerDamage[k].HighestDamage = e.Iterations[i].Players[j].DamageDealt
+					if playerDamage[k].HighestDamage == nil || playerDamage[k].HighestDamage.Damage < e.Iterations[i].Players[j].DamageDealt {
+						playerDamage[k].HighestDamage = &FightResult{
+							Damage: e.Iterations[i].Players[j].DamageDealt,
+							Player: e.Iterations[i].Players[j],
+						}
 					}
-					// Print Statistics for AAs and Skills
-					// e.Iterations[i].Players[j].Job.Report()
 				}
 			}
 		}
@@ -138,17 +157,33 @@ func (e *Encounter) Report() {
 	for i := 0; i < len(playerDamage); i++ {
 		playerDamage[i].AverageDamage /= len(e.Iterations)
 	}
+	// Calculate the Rate Averages for the Lowest an Highest Damage Runs
+	for i := 0; i < len(playerDamage); i++ {
+		playerDamage[i].LowestDamage.CritRate, playerDamage[i].LowestDamage.DHitRate, playerDamage[i].LowestDamage.CDHRate = playerDamage[i].LowestDamage.Player.Job.GetRateAverages()
+		playerDamage[i].HighestDamage.CritRate, playerDamage[i].HighestDamage.DHitRate, playerDamage[i].HighestDamage.CDHRate = playerDamage[i].HighestDamage.Player.Job.GetRateAverages()
+	}
 	fmt.Printf("Total Damage (All Encounters): %d\nAverage Damage: %d (%d DPS)\nLowest Damage: %d (%d DPS)\nHighest Damage: %d (%d DPS)\n\n",
 		TotalDamage, AverageDamage, AverageDPS, LowestDamage, LowestDPS, HighestDamage, HighestDPS)
 	for i := 0; i < len(playerDamage); i++ {
-		fmt.Printf("Player: %s - Average Damage: %d (%d DPS) - Lowest Damage: %d (%d DPS) - Highest Damage: %d (%d DPS)\n",
+		fmt.Printf("Player: %s - Average Damage: %d (%d DPS) - Lowest Damage: %d (%d DPS, c:%f%%,d:%f%%,cdh:%f%%) - Highest Damage: %d (%d DPS, c:%f%%,d:%f%%,cd:%f%%)\n",
 			playerDamage[i].Player.Name, playerDamage[i].AverageDamage, playerDamage[i].AverageDamage/e.Duration,
-			playerDamage[i].LowestDamage, playerDamage[i].LowestDamage/e.Duration,
-			playerDamage[i].HighestDamage, playerDamage[i].HighestDamage/e.Duration)
+			playerDamage[i].LowestDamage.Damage, playerDamage[i].LowestDamage.Damage/e.Duration, playerDamage[i].LowestDamage.CritRate, playerDamage[i].LowestDamage.DHitRate, playerDamage[i].LowestDamage.CDHRate,
+			playerDamage[i].HighestDamage.Damage, playerDamage[i].HighestDamage.Damage/e.Duration, playerDamage[i].HighestDamage.CritRate, playerDamage[i].HighestDamage.DHitRate, playerDamage[i].HighestDamage.CDHRate)
+		playerDamage[i].HighestDamage.Player.Job.Report()
 	}
 }
 
-func NewIteration(seed int64, duration int, players *[]*player.Player) *Iteration {
+func PrintSkillDamage(s skill.Skill, iterations int, duration int, totalDamage int) {
+	fmt.Printf("%s: %d Average Uses - %d Damage/Iteration - %d Damage/Use - %d DPS - %f%%\n",
+		s.Name,
+		s.Uses/iterations,
+		s.DamageDealt/iterations,
+		s.DamageDealt/s.Uses,
+		s.DamageDealt/(iterations*duration),
+		float64(s.DamageDealt)/float64(totalDamage)*100)
+}
+
+func NewIteration(seed int64, duration int, players *[]*player.Player, downtimes *[]Downtime) *Iteration {
 	enemy := &enemy.Enemy{
 		Name: fmt.Sprintf("Test Enemy ITERATION %d", seed),
 	}
@@ -158,6 +193,7 @@ func NewIteration(seed int64, duration int, players *[]*player.Player) *Iteratio
 		Enemy:            enemy,
 		Players:          nil,
 		maxEncounterTime: duration * 1000,
+		Downtime:         *downtimes,
 	}
 	// Copy the Base Players
 	for j := 0; j < len(*players); j++ {
@@ -170,10 +206,25 @@ func (i *Iteration) Run(encounterWG *sync.WaitGroup, tick int) {
 	defer encounterWG.Done()
 	// Loop until the encounter is over (duration is reached)
 	for i.encounterTime < i.maxEncounterTime {
-		// Run the current Tick
-		i.Tick()
-		// Increase the encounter time by the duration of the Tick
-		i.encounterTime += tick
+		// Check there are downtimes specified
+		if len(i.Downtime) == 0 {
+			// No downtimes specified, so we just run the current Tick
+			i.Tick()
+			// Increase the encounter time by the duration of the Tick
+			i.encounterTime += tick
+			continue
+		}
+		for j := 0; j < len(i.Downtime); j++ {
+			if i.encounterTime >= i.Downtime[j].Start && i.encounterTime < i.Downtime[j].End {
+				// We are in a Downtime, so we skip this Tick
+				i.encounterTime += tick
+				continue
+			}
+			// Run the current Tick
+			i.Tick()
+			// Increase the encounter time by the duration of the Tick
+			i.encounterTime += tick
+		}
 	}
 	// Calculate the total Damage taken by the Enemies
 	i.TotalDamage = i.Enemy.DamageTaken
