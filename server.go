@@ -9,6 +9,7 @@ import (
 	"github.com/ATroschke/xivsim/sim/player"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 type SimRequest struct {
@@ -32,11 +33,13 @@ func main() {
 
 	g := gin.Default()
 	g.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"*", "http://168.119.56.82:3000"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		AllowCredentials: true,
 	}))
+	p := ginprometheus.NewPrometheus("xivSim")
+	p.Use(g)
 
 	g.POST("/sim", func(c *gin.Context) {
 		var simRequest SimRequest
@@ -60,6 +63,17 @@ func main() {
 		downtimes := make([]encounter.Downtime, 0)
 		// Get the current time as a Name String
 		timeString := time.Now().Format("2006-01-02 15:04:05")
+		// Make sure Duration and Iterations are within bounds
+		if simRequest.Duration < 30 {
+			simRequest.Duration = 30
+		} else if simRequest.Duration > 1800 {
+			simRequest.Duration = 1800
+		}
+		if simRequest.Iters < 2 {
+			simRequest.Iters = 2
+		} else if simRequest.Iters > 10000 {
+			simRequest.Iters = 10000
+		}
 		// Create a new Encounter
 		encounter := encounter.NewEncounter(timeString, players, simRequest.Duration, simRequest.Ping, simRequest.TickRate, simRequest.Iters, &downtimes)
 		encounter.Run()

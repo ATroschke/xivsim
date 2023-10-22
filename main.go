@@ -16,7 +16,7 @@ import (
 	Simply run `go mod tidy` (once) and `go run main.go` to start a simulation.
 */
 
-func main() {
+func dev() {
 	// Set GOMAXPROCS to the number of CPUs available, we want to punch in as much performance as we can
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	// Read a Gearset from Etro.gg
