@@ -7,6 +7,7 @@ import (
 	"github.com/ATroschke/xivsim/api"
 	"github.com/ATroschke/xivsim/sim/encounter"
 	"github.com/ATroschke/xivsim/sim/player"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,11 +26,17 @@ type PlayerRequest struct {
 	EtroID        string `json:"etroID" binding:"required"`
 }
 
-func server() {
+func main() {
 	// Set GOMAXPROCS to the number of CPUs available
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	g := gin.Default()
+	g.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		AllowCredentials: true,
+	}))
 
 	g.POST("/sim", func(c *gin.Context) {
 		var simRequest SimRequest
