@@ -11,11 +11,15 @@ import (
 )
 
 type IJob interface {
-	GetSkills() []*skill.Skill
+	GetSkills() []*skill.Skill // Asks for all Skills of the Job Implementation as an array
 	GetBuffs() []*buff.Buff
-	NextSkill(j *Job, encounterTime int64) *skill.Skill
+	GetDots() []*buff.DOT
+	NextSkill(j *Job, encounterTime int64) *skill.Skill // Given the current Job State and Encounter Time, asks the Job for the best next Skill
 	ValidateAutoCDH(s *skill.Skill) bool
 	GetBuffModifiers(encounterTime int64) float64
+	CheckPotionStatus(encounterTime int64) bool
+	GetJobMod() (int, int)
+	GetDesiredPrepullDuration() int
 }
 
 type Job struct {
@@ -28,6 +32,7 @@ type Job struct {
 	NextCombo          []*skill.Skill
 	SkillLog           []SkillLog
 	JobImpl            IJob
+	DamageDealt        int // Holds the total damage dealt by the Player
 }
 
 type DamageModifiers struct {
@@ -49,7 +54,13 @@ func NewJob(name string, speed *Speed) *Job {
 	var jobImpl IJob
 	switch name {
 	case "WAR":
-		jobImpl = NewWarrior(speed)
+		jobImpl = NewWarrior()
+	case "PLD":
+		jobImpl = NewPaladin()
+	case "GNB":
+		jobImpl = NewGunbreaker()
+	case "DRK":
+		jobImpl = NewDarkknight()
 	}
 	return &Job{
 		Name:       name,
@@ -62,12 +73,8 @@ func NewJob(name string, speed *Speed) *Job {
 
 // Create a new instance of a job with the same stats as the given job.
 func (j *Job) CopyJob() *Job {
-	var jobImpl IJob
-	switch j.Name {
-	case "WAR":
-		jobImpl = CopyWarrior(j)
-	}
-	return &Job{
+	// Create a new Job
+	newJ := &Job{
 		Name:               j.Name,
 		GCDUntil:           j.GCDUntil,
 		AnimationLockUntil: j.AnimationLockUntil,
@@ -76,8 +83,19 @@ func (j *Job) CopyJob() *Job {
 		DamageModifiers:    j.DamageModifiers,
 		NextCombo:          j.NextCombo,
 		SkillLog:           j.SkillLog,
-		JobImpl:            jobImpl,
 	}
+	switch j.Name {
+	case "WAR":
+		newJ.JobImpl = CopyWarrior(j)
+	case "PLD":
+		newJ.JobImpl = CopyPaladin(j)
+	case "GNB":
+		newJ.JobImpl = CopyGunbreaker(j)
+	case "DRK":
+		newJ.JobImpl = CopyDarkknight(j)
+	}
+
+	return newJ
 }
 
 func CalculateDamageModifiers(criticalHit int, directHit int, LvSub int, LvDiv int) DamageModifiers {
@@ -88,22 +106,19 @@ func CalculateDamageModifiers(criticalHit int, directHit int, LvSub int, LvDiv i
 	}
 }
 
-func (j *Job) Tick(enemy *enemy.Enemy, encounterTime int64) (int, int) {
+func (j *Job) Tick(enemy *enemy.Enemy, encounterTime int64) {
 	// Update the Player
 	j.Update(encounterTime)
-	// Keep track of the damage dealt this tick
-	var aaDamage, skillDamage int
 	// Check if the Player can Auto Attack
-	if j.AutoAttack.NextCharge <= encounterTime || j.AutoAttack.NextCharge == 0 {
-		aaDamage = j.UseSkill(enemy, &j.AutoAttack, encounterTime)
+	if (j.AutoAttack.NextCharge <= encounterTime || j.AutoAttack.NextCharge == 0) && encounterTime >= 0 {
+		j.DamageDealt += j.UseSkill(enemy, &j.AutoAttack, encounterTime)
 	}
 	// Select the next skill to use
 	skill := j.JobImpl.NextSkill(j, encounterTime)
 	if skill != nil {
 		// Use the skill
-		skillDamage = j.UseSkill(enemy, skill, encounterTime)
+		j.DamageDealt += j.UseSkill(enemy, skill, encounterTime)
 	}
-	return aaDamage, skillDamage
 }
 
 func (j *Job) Update(encounterTime int64) {
@@ -131,11 +146,10 @@ func (j *Job) Update(encounterTime int64) {
 
 func (j *Job) UseSkill(enemy *enemy.Enemy, s *skill.Skill, encounterTime int64) int {
 	s.Uses++
-	if s.GCD == skill.OGCD {
-		fmt.Printf("%s: %d\n", s.Name, encounterTime)
+	// We need to set the animation lock if the skill is not an AA an it has an Animation Lock
+	if s.GCD != skill.AA && s.LockMS != 0 {
+		j.AnimationLockUntil = encounterTime + int64(s.LockMS)
 	}
-	// We always need to set the Animation Lock
-	j.AnimationLockUntil = encounterTime + int64(s.LockMS)
 	// If the skill is a GCD, set GCDUntil
 	if s.GCD != skill.AA && s.GCD != skill.OGCD {
 		j.GCDUntil = encounterTime + int64(j.Speed.GetGCD(s.GCD))
@@ -182,10 +196,20 @@ func (j *Job) UseSkill(enemy *enemy.Enemy, s *skill.Skill, encounterTime int64) 
 			randMod *= 1.25
 		}
 		buffMod := j.JobImpl.GetBuffModifiers(encounterTime)
+		// Get the current Pot status
+		pot := j.JobImpl.CheckPotionStatus(encounterTime)
 		if autoCDH {
-			damage = int(math.Floor(float64(s.CalculatedAutoCDHDamage) * randMod * buffMod))
+			if pot {
+				damage = int(math.Floor(float64(s.CalculatedPotAutoCDHDamage) * randMod * buffMod))
+			} else {
+				damage = int(math.Floor(float64(s.CalculatedAutoCDHDamage) * randMod * buffMod))
+			}
 		} else {
-			damage = int(math.Floor(float64(s.CalculatedDamage) * randMod * buffMod))
+			if pot {
+				damage = int(math.Floor(float64(s.CalculatedPotDamage) * randMod * buffMod))
+			} else {
+				damage = int(math.Floor(float64(s.CalculatedDamage) * randMod * buffMod))
+			}
 		}
 		damage = enemy.TakeDamage(damage)
 		s.DamageDealt += damage
@@ -193,7 +217,7 @@ func (j *Job) UseSkill(enemy *enemy.Enemy, s *skill.Skill, encounterTime int64) 
 
 	// Apply the skill's custom logic
 	if s.CustomLogic != nil {
-		s.CustomLogic(j, encounterTime)
+		s.CustomLogic(j, enemy, encounterTime)
 	}
 
 	j.SkillLog = append(j.SkillLog, SkillLog{
@@ -223,24 +247,26 @@ func (j *Job) GetRateAverages() (float64, float64, float64) {
 	return critRate / float64(len(j.SkillLog)) * 100, directRate / float64(len(j.SkillLog)) * 100, critDirectRate / float64(len(j.SkillLog)) * 100
 }
 
-func (j *Job) Report() {
+func (j *Job) Report() string {
+	var result string
 	// Print the Skill Log
-	fmt.Println("Skill Log:")
+	result += "Skill Log:\n"
 	for _, s := range j.SkillLog {
 		// Time: Skill - Damage
-		fmt.Printf("%d: %s - %d", s.Time, s.Name, s.Damage)
+		result += fmt.Sprintf("%d: %s - %d", s.Time, s.Name, s.Damage)
 		// If it's a crit + directhit, append a !!
 		if s.Crit && s.DirectHit {
-			fmt.Printf("!!")
+			result += "!!"
 		} else if s.Crit {
-			fmt.Printf("!")
+			result += "!"
 		} else if s.DirectHit {
-			fmt.Printf("*")
+			result += "*"
 		}
 		// TODO: Write job specific stuff
 		// Append a newline
-		fmt.Printf("\n")
+		result += "\n"
 	}
+	return result
 }
 
 // CalculateSkills calculates the base damage of all skills (without crit, direct hit, buffs, etc.)
@@ -259,6 +285,7 @@ func (j *Job) CalculateSkills(
 	weaponDelay := float64(j.Speed.AA) / 1000
 	// Get the skills to calculate from the JobImpl
 	skills := j.JobImpl.GetSkills()
+	m, jobmod := j.JobImpl.GetJobMod()
 	// Iterate over all skills
 	for i := range skills {
 		// Calculate the base damage of the skill
@@ -272,7 +299,30 @@ func (j *Job) CalculateSkills(
 			spellSpeed,
 			tenacity,
 			weaponDelay,
+			m,
+			jobmod,
 		)
+	}
+	dots := j.JobImpl.GetDots()
+	for i := range dots {
+		dots[i].CalculateDamage(
+			weaponDamage,
+			mainStat,
+			criticalHit,
+			directHit,
+			determination,
+			skillSpeed,
+			spellSpeed,
+			tenacity,
+			weaponDelay,
+			m,
+			jobmod,
+		)
+		dots[i].CritDamage = int(math.Floor(float64(dots[i].Damage) * j.DamageModifiers.CritDamage))
+		dots[i].DirectDamage = int(math.Floor(float64(dots[i].Damage) * 1.25))
+		dots[i].CritDirectDamage = int(math.Floor(float64(dots[i].Damage) * j.DamageModifiers.CritDamage * 1.25))
+		dots[i].CritRate = j.DamageModifiers.CritRate
+		dots[i].DirectRate = j.DamageModifiers.DirectRate
 	}
 	j.AutoAttack.CalculateDamage(
 		weaponDamage,
@@ -284,18 +334,28 @@ func (j *Job) CalculateSkills(
 		spellSpeed,
 		tenacity,
 		weaponDelay,
+		m,
+		jobmod,
 	)
 }
 
 // Default Skills
-var // Auto Attack
-AutoAttack = skill.Skill{
-	Name:        "Attack",
-	ID:          7,
-	Potency:     90, // TODO: Should be 80 for Casters
-	GCD:         skill.AA,
-	Charges:     1,
-	MaxCharges:  1,
-	BreaksCombo: false,
-	LockMS:      0,
-}
+var (
+	// Auto Attack
+	AutoAttack = skill.Skill{
+		Name:        "Attack",
+		ID:          7,
+		Potency:     90, // TODO: Should be 80 for Casters
+		GCD:         skill.AA,
+		Charges:     1,
+		MaxCharges:  1,
+		BreaksCombo: false,
+		LockMS:      0,
+	}
+	// Tincture
+	TinctureBuff = buff.Buff{
+		Name:         "Grade 8 Tincture of Strength",
+		DurationMS:   30000,
+		AppliedUntil: 0,
+	}
+)

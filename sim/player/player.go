@@ -10,13 +10,12 @@ import (
 // Player is a struct that contains all the information about a player.
 
 type Player struct {
-	ID          int // Player ID to identify the Player in the Encounter
-	Name        string
-	Job         job.Job
-	Level       int
-	Stats       *Stats
-	Speed       *job.Speed
-	DamageDealt int
+	ID    int // Player ID to identify the Player in the Encounter
+	Name  string
+	Job   job.Job
+	Level int
+	Stats *Stats
+	Speed *job.Speed
 	// TODO: ? Gear (Struct that contains all the gear)
 }
 
@@ -80,10 +79,14 @@ func CopyPlayer(player *Player) *Player {
 	return p
 }
 
+// Checks if Player's Job desires a Pre-Pull for optimal play.
+func (p *Player) GetPrepullDuration() int {
+	return p.Job.JobImpl.GetDesiredPrepullDuration()
+}
+
 // Runs the current Tick of the Player.
 func (p *Player) Tick(tickWG *sync.WaitGroup, encounterTime int, enemy *enemy.Enemy, players []*Player) {
 	defer tickWG.Done()
 	// Run the current Tick of the Player's Job
-	aaDamage, skillDamage := p.Job.Tick(enemy, int64(encounterTime))
-	p.DamageDealt += (aaDamage + skillDamage)
+	p.Job.Tick(enemy, int64(encounterTime))
 }

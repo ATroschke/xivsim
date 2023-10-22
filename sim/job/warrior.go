@@ -2,6 +2,7 @@ package job
 
 import (
 	"github.com/ATroschke/xivsim/sim/buff"
+	"github.com/ATroschke/xivsim/sim/enemy"
 	"github.com/ATroschke/xivsim/sim/skill"
 )
 
@@ -35,9 +36,10 @@ type WarriorBuffs struct {
 	NascentChaos    buff.Buff
 	InnerRelease    buff.Buff
 	PrimalRendReady buff.Buff
+	Tincture        buff.Buff
 }
 
-func NewWarrior(speed *Speed) *Warrior {
+func NewWarrior() *Warrior {
 	return &Warrior{
 		Skills: WarriorSkills{
 			HeavySwing:   HeavySwing,
@@ -57,6 +59,7 @@ func NewWarrior(speed *Speed) *Warrior {
 			NascentChaos:    NascentChaos,
 			InnerRelease:    InnerReleaseBuff,
 			PrimalRendReady: PrimalRendReady,
+			Tincture:        TinctureBuff,
 		},
 	}
 }
@@ -82,6 +85,7 @@ func CopyWarrior(j *Job) *Warrior {
 			NascentChaos:    w.Buffs.NascentChaos,
 			InnerRelease:    w.Buffs.InnerRelease,
 			PrimalRendReady: w.Buffs.PrimalRendReady,
+			Tincture:        w.Buffs.Tincture,
 		},
 	}
 }
@@ -108,27 +112,42 @@ func (w *Warrior) GetBuffs() []*buff.Buff {
 		&w.Buffs.NascentChaos,
 		&w.Buffs.InnerRelease,
 		&w.Buffs.PrimalRendReady,
+		&w.Buffs.Tincture,
 	}
 }
 
+func (w *Warrior) GetDots() []*buff.DOT {
+	return []*buff.DOT{}
+}
+
+func (w *Warrior) GetJobMod() (int, int) {
+	return 156, 105
+}
+
 func (w *Warrior) NextSkill(job *Job, encounterTime int64) *skill.Skill {
-	// Check if the player is animation locked
-	if encounterTime < job.AnimationLockUntil {
-		// The player is animation locked, so we can't use any skill
+	// Normal Rotation
+	if encounterTime >= 0 {
+		// Check if the player is animation locked
+		if encounterTime < job.AnimationLockUntil {
+			// The player is animation locked, so we can't use any skill
+			return nil
+		}
+		// Check if the GCD is ready
+		if encounterTime >= job.GCDUntil {
+			// GCD is ready, so we need to select a GCD
+			return w.SelectNextGCD(job, encounterTime)
+		}
+		// Check if the default animation lock (700ms) would cut into the GCD
+		if encounterTime+700 >= job.GCDUntil {
+			// The default animation lock would cut into the GCD, so we can't use any skill
+			return nil
+		}
+		// GCD is not ready and wouldn't be cut into, so we need to select an OGCD
+		return w.SelectNextOGCD(encounterTime)
+	} else {
+		// Warrior has no Prepull
 		return nil
 	}
-	// Check if the GCD is ready
-	if encounterTime >= job.GCDUntil {
-		// GCD is ready, so we need to select a GCD
-		return w.SelectNextGCD(job, encounterTime)
-	}
-	// Check if the default animation lock (700ms) would cut into the GCD
-	if encounterTime+700 >= job.GCDUntil {
-		// The default animation lock would cut into the GCD, so we can't use any skill
-		return nil
-	}
-	// GCD is not ready and wouldn't be cut into, so we need to select an OGCD
-	return w.SelectNextOGCD(encounterTime)
 }
 
 func (w *Warrior) SelectNextGCD(job *Job, encounterTime int64) *skill.Skill {
@@ -197,6 +216,11 @@ func (w *Warrior) GetBuffModifiers(encounterTime int64) float64 {
 	return 1
 }
 
+func (w *Warrior) CheckPotionStatus(time int64) bool {
+	//return w.Buffs.Tincture.AppliedUntil >= time
+	return false
+}
+
 func (w *Warrior) IncreaseBeastGauge(amount int) {
 	w.BeastGauge += amount
 	if w.BeastGauge > 100 {
@@ -209,6 +233,10 @@ func (w *Warrior) DecreaseBeastGauge(amount int) {
 	if w.BeastGauge < 0 {
 		w.BeastGauge = 0
 	}
+}
+
+func (w *Warrior) GetDesiredPrepullDuration() int {
+	return 0
 }
 
 // Warrior Skills
@@ -231,7 +259,7 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   []*skill.Skill{&StormsEye},
-		CustomLogic: func(job any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
 			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 10
@@ -246,7 +274,7 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   nil,
-		CustomLogic: func(job any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
 			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 10
@@ -263,7 +291,7 @@ var (
 		BreaksCombo: true,
 		LockMS:      700,
 		NextCombo:   nil,
-		CustomLogic: func(job any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
 			w := job.(*Job).JobImpl.(*Warrior)
 			// Increase the Beast Gauge by 20
@@ -278,9 +306,9 @@ var (
 		BreaksCombo: false,
 		LockMS:      700,
 		NextCombo:   nil,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Job).JobImpl.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			if w.Buffs.InnerRelease.Stacks > 0 {
 				w.Buffs.InnerRelease.Stacks--
 			} else {
@@ -299,9 +327,9 @@ var (
 		BreaksCombo: false,
 		LockMS:      700,
 		AutoCDH:     true,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Job).JobImpl.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Remove the Nascent Chaos buff
 			w.Buffs.NascentChaos.AppliedUntil = 0
 			// Decrease the Beast Gauge by 50
@@ -318,9 +346,9 @@ var (
 		BreaksCombo: false,
 		LockMS:      1000,
 		AutoCDH:     true,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Job).JobImpl.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Remove the Primal Rend Ready buff
 			w.Buffs.PrimalRendReady.Stacks--
 		},
@@ -358,9 +386,9 @@ var (
 		CooldownMS:  60000,
 		MaxCharges:  2,
 		Charges:     2,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Job).JobImpl.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Apply the Nascent Chaos buff
 			w.Buffs.NascentChaos.AppliedUntil = time + w.Buffs.NascentChaos.DurationMS
 			// Increase the Beast Gauge by 50
@@ -377,14 +405,15 @@ var (
 		CooldownMS:  60000,
 		MaxCharges:  1,
 		Charges:     1,
-		CustomLogic: func(v any, time int64) {
+		CustomLogic: func(job any, target *enemy.Enemy, time int64) {
 			// Cast v to *Warrior
-			w := v.(*Job).JobImpl.(*Warrior)
+			w := job.(*Job).JobImpl.(*Warrior)
 			// Apply the Inner Release buff
 			w.Buffs.InnerRelease.Stacks = w.Buffs.InnerRelease.MaxStacks
 			// Apply the Primal Rend Ready buff
 			w.Buffs.PrimalRendReady.Stacks = w.Buffs.PrimalRendReady.MaxStacks
 			// Extend the duration of the Surging Tempest buff by 10 seconds
+			// Does IR apply Surging Tempest if appliedUntil < time+10000?
 			w.Buffs.SurgingTempest.AppliedUntil += 10000
 		},
 	}

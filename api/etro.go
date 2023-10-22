@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -29,15 +30,18 @@ type Stats struct {
 }
 
 func GetFromEtro(id string) (*Stats, error) {
+	fmt.Printf("Retrieving Gearset %s from ETRO\n", id)
 	// Request the data from the Etro API, URL: https://etro.gg/api/gearsets/ + id
 	res, err := http.Get("https://etro.gg/api/gearsets/" + id)
 	if err != nil {
+		fmt.Printf("Error retrieving %s from ETRO\n", id)
 		return &Stats{}, err
 	}
 	// Parse the JSON response into a struct
 	var etroResponse EtroResponse
 	err = json.NewDecoder(res.Body).Decode(&etroResponse)
 	if err != nil {
+		fmt.Printf("Error decoding %s from ETRO\n", id)
 		return &Stats{}, err
 	}
 	// Create a new Stats struct
